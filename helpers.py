@@ -26,9 +26,7 @@ def optimal_traj(A, C, Q, R, y):
     Rinv = np.linalg.inv(R)
     state_dim = A.shape[0]
     T = y.shape[0]
-
     xs = cp.Variable((T, state_dim))
-
     # Set up the objective function
     obj = 0
     for i in range(1, T):
