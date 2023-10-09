@@ -16,7 +16,7 @@ def get_relevant_baselines(task_name, A, C, Q, R, x0):
             (PrevPredictorModel, {}),
             (KfModel, {'A':A, 'C':C, 'Q':Q, 'R':R, 'x0':x0}),
             (IdKfModel, {'Q':Q, 'R':R, 'x0':x0}),
-            (LearnedKfModel, {})
+            # (LearnedKfModel, {})
         ],  
         'truestates_recovery': [
             (ZeroPredictorModel, {}),
@@ -45,11 +45,12 @@ class KfModel:
         self.name = 'KalmanFilter'
         self.A, self.C, self.Q, self.R, self.x0 = A, C, Q, R, x0
     def __call__(self, ys):
+        print("ys has shape", ys.shape)
         recv = np.zeros_like(ys)
-        num_traj, obs_dim, traj_len = ys.shape
+        traj_len, num_traj, obs_dim = ys.shape
         for trajNum in range(num_traj):
             kinematics = KFilter(self.A, self.C, self.Q, self.R, state=self.x0)
-            recv[trajNum] = kinematics.simulate(ys[trajNum].T).T      
+            recv[:, trajNum, :] = kinematics.simulate(ys[:, trajNum, :])
         return recv
 
 class IdKfModel:
@@ -60,20 +61,21 @@ class IdKfModel:
         self.x0 = x0
 
     def __call__(self,  ys):
-        num_traj, obs_dim, seq_len = ys.shape
-        recv = np.zeros(shape=(num_traj, obs_dim, seq_len))
+        print("ys has shape", ys.shape)
+        traj_len, num_traj, obs_dim  = ys.shape
+        recv = np.zeros_like(ys)
         for i in range(num_traj):
-            # No peeking on what are the actual A matrix
+            # No peeking on what is the actual A matrix
             # C is assumed to be the identity matrix
             A_unk = np.zeros(shape=(obs_dim, obs_dim))
             C = np.eye(obs_dim, obs_dim)
             kinematics = KFilter(A_unk, C, self.Q, self.R, state=self.x0)
-            for t in range(seq_len):
-                A_found = system_id(ys[i].T, t, self.x0)
+            for t in range(traj_len):
+                A_found = system_id(ys[:, i, :], t, self.x0)
                 kinematics.A = A_found
                 kinematics.predict()
-                kinematics.update(ys[i, :, t])
-                recv[i, :, t] = kinematics.state
+                kinematics.update(ys[t, i, :])
+                recv[t, i, :] = kinematics.state
         return recv
 
 class LerpModel:
@@ -137,7 +139,7 @@ class GPTModel(nn.Module):
         )
         self.n_positions = n_positions
         self.n_dims_token = n_dims_token
-
+        self.name = "GPTModel"
         self._read_in = nn.Linear(n_dims_token, n_embd).to(myDevice, dtype=torch.float32)
         self._backbone = GPT2Model(configuration).to(myDevice, dtype=torch.float32)
         self._read_out = nn.Linear(n_embd, n_dims_token).to(myDevice, dtype=torch.float32)
@@ -152,10 +154,12 @@ class BERTModel(nn.Module):
     
     def __init__(self, n_dims_token, n_positions, n_embd, n_layer, n_head):
         super(BERTModel, self).__init__()
+        self.name = "BERTModel"
         self._read_in = nn.Linear(n_dims_token, n_embd).to(myDevice, dtype=torch.float32)
         self._backbone = nn.TransformerEncoder(
             nn.TransformerEncoderLayer(d_model=n_embd, nhead=n_head, dim_feedforward=2048, dropout=0, activation=F.relu), 
-            num_layers=n_layer, layer_norm=nn.LayerNorm(n_embd))
+            num_layers=n_layer, layer_norm=nn.LayerNorm(n_embd)
+        )
         self._read_out = nn.Linear(n_dims_token, n_embd).to(myDevice, dtype=torch.float32)
 
     def forward(self, ys):

@@ -5,12 +5,14 @@ import numpy as np
 import argparse
 from matplotlib import pyplot as plt
 
-from models import GPTModel
+from models import *
 from trajectories import *
 from kalman_filter import *
 from plotting import *
 
 import wandb
+
+CUT = 5
 
 myDevice = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 rng = np.random.default_rng(seed=0)
@@ -46,10 +48,8 @@ def train(model, args, A, C, Q, R, S, x0, state_dim, obs_dim):
     for i in range(args['num_iterations']): 
         # Generate new training data each iteration
         x, y = generate_traj(args['batch_size'], args['traj_len'], A, C, Q, R, S, x0, rng, state_dim, obs_dim)
-        
-        # Cast to PyTorch tensors
         curr_loss = train_step(model, y, optimizer, loss_func)
-        print("Iteration", i, "curr_loss", curr_loss)
+        wandb.log({"Iteration": i, "Loss": curr_loss})
         losses.append(curr_loss)
 
     train_state = {
@@ -67,36 +67,49 @@ def train(model, args, A, C, Q, R, S, x0, state_dim, obs_dim):
     plt.plot(losses)
     plt.show()
 
-
-def visualize(model, args, A, C, Q, R, S, x0, state_dim, obs_dim):
-    model.eval()
+def visualize(trained_model, args, A, C, Q, R, S, x0, state_dim, obs_dim):
+    trained_model.eval()
     path = os.path.join(args['save_path'], 'gpt_order{0}_emb{1}_heads{2}_layers{3}_lr{4}.pt'.format(args['order_n'], args['gpt_n_embd'], args['gpt_n_head'], args['gpt_n_layer'], args['lr']))
     torch.load(path)
-
-    x, y = generate_traj(1, args['traj_len'], A, C, Q, R, S, x0, rng, state_dim, obs_dim)
+    x, y = generate_traj(100, args['traj_len'], A, C, Q, R, S, x0, rng, state_dim, obs_dim)
     
-    # All tensors should have shape (batch_size, seq_len)
-    
-    transformer_input = torch.tensor(y[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(2, 0, 1)
-    recv = model(transformer_input).detach().numpy()
-    err_ys = np.linalg.norm(recv - y[:, :, 1:].T, axis=(1, 2))
-    
-    # Plot trajectory, measured, and recovered in space.
-    plot({"Trajectory": x[0, :, 1:].T, "Measured":y[0, :, 1:].T, "Filtered":recv[:, 0, :]})
     # Plot error per timestep.
     plt.figure()
     plt.title("Error per timestep")
-    plt.yscale('log')
     plt.xlabel("Timestep")
     plt.ylabel("Error")
-    plt.plot(err_ys)
+
+    # All tensors should have shape (batch_size, seq_len)
+    input_ys = torch.tensor(y[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(2, 0, 1)
+    recv_gpt = trained_model(input_ys).detach().cpu().numpy()
+    true_values = torch.tensor(y[:, :, 1:]).permute(2, 0, 1).detach().cpu().numpy()
+    err_ys_gpt = np.linalg.norm(recv_gpt - true_values, axis=2)
+    medians = np.quantile(err_ys_gpt, 0.5, axis=1)
+    plt.scatter(range(len(medians)), medians, label='Median Error of GPT')
+
+    for baseline_model in get_relevant_baselines('nextstate_prediction', A, C, Q, R, x0):
+        print("baseline Method", baseline_model.name)
+        recv_baseline = baseline_model(input_ys.detach().cpu().numpy())
+        true_values = torch.tensor(y[:, :, 1:]).permute(2, 0, 1).detach().numpy()
+        errs_ys_baseline = np.linalg.norm(recv_baseline - true_values, axis=2)
+        medians = np.quantile(errs_ys_baseline, 0.5, axis=1)
+        plt.scatter(range(len(medians)), medians, label='Median Error of {0}'.format(baseline_model.name))
+        
+    plt.legend()
     plt.show()
 
 def main(args):
     A, C, Q, R, S, x0, state_dim, obs_dim = so2_params()
+    run = wandb.init(
+        project='dynamical-systems',
+        config={
+            'learning rate': args['lr'], 'iterations':args['num_iterations'], 'optimizer':args['optim'], 'batchsize':args['batch_size'],
+            'gpt_n_embd':args['gpt_n_embd'], 'gpt_n_layer':args['gpt_n_layer'], 'gpt_n_head':args['gpt_n_head'],
+    })
     model = GPTModel(n_dims_token=obs_dim, n_positions=args['traj_len'], n_embd=args['gpt_n_embd'], n_layer=args['gpt_n_layer'], n_head=args['gpt_n_head'])
     train(model, args, A, C, Q, R, S, x0, state_dim, obs_dim)
     visualize(model, args, A, C, Q, R, S, x0, state_dim, obs_dim)
+    wandb.finish()
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -104,7 +117,7 @@ if __name__ == '__main__':
         choices=('stable_sys', 'nontrivial_sys', 'so2', 'so3', 'smd', 'motion', 'accel')
     )
     parser.add_argument('--num_tests', type=int, default=100)
-    parser.add_argument('--traj_len', type=int, default=150)
+    parser.add_argument('--traj_len', type=int, default=200)
     parser.add_argument('--order_n', type=int, default=2)
 
     parser.add_argument('--gpt_n_embd', type=int, default=12)
@@ -114,7 +127,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--optim', type=str, default='adamw')
-    parser.add_argument('--num_iterations', type=int, default=1000)
+    parser.add_argument('--num_iterations', type=int, default=300)
     parser.add_argument('--save_path', type=str, default='./results/')
 
     # convert to dictionary
