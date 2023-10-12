@@ -6,7 +6,7 @@ import unittest
 from plotting import *
 
 # Given the system parameters and timelength, generate num_traj trajectories
-def generate_traj(num_traj, T, A, C, Q, R, S, x0, rng, state_dim=None, input_dim=None, obs_dim=None):
+def generate_traj(num_traj, T, A, C, Q, R, S, x0, rng, state_dim=None, obs_dim=None):
     if state_dim is None: state_dim = A.shape[0]
     if obs_dim is None: obs_dim = C.shape[0]
 
@@ -43,9 +43,8 @@ def so2_params(angle=1, process_noise=0.001, sensor_noise=0.01):
     C = np.eye(obs_dim, state_dim) # State fully observed
     Q = process_noise * np.eye(state_dim) # Covariance matrix of process noise
     R = sensor_noise * np.eye(obs_dim) # Covariance matrix of sensor noise
-    S = np.zeros(shape=(state_dim, obs_dim))
     x0= np.array([1.0, 0.0], dtype=np.float64) # Starting state
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 def so3_params(angle=1, axis=np.array([1/np.sqrt(3), 1/np.sqrt(3), 1/np.sqrt(3)]), process_noise=0.001, sensor_noise=0.01):
     theta = angle * 1/360*2*np.pi # one degree per timestep
@@ -57,9 +56,8 @@ def so3_params(angle=1, axis=np.array([1/np.sqrt(3), 1/np.sqrt(3), 1/np.sqrt(3)]
     C = np.eye(state_dim)
     Q = process_noise * np.eye(state_dim)
     R = sensor_noise * np.eye(obs_dim)
-    S = np.zeros(shape=(state_dim, obs_dim))
     x0= np.array([1.0, 0.0, 0.0], dtype=np.float64) # starting state
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 def smd_params(mass=1, k_spring=1, b_damper=0.2, process_noise=0.0001, sensor_noise=0.01):
     state_dim = 2
@@ -80,9 +78,8 @@ def smd_params(mass=1, k_spring=1, b_damper=0.2, process_noise=0.0001, sensor_no
     C = np.array([[1.0, 0.0]]) # Only position x observed at each timestep
     Q = process_noise * np.eye(state_dim)
     R = sensor_noise * np.eye(obs_dim)
-    S = np.zeros(shape=(state_dim, obs_dim))
     x0= np.array([1.0, 0.0]) # Starting state
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 # Traveling with a constant velocity that can be driven, only the position is observed.
 def motion_params(process_noise=1, sensor_noise=0.4):
@@ -97,9 +94,8 @@ def motion_params(process_noise=1, sensor_noise=0.4):
     Q = process_noise * np.array([[0, 0], 
                                   [0, 1]])
     R = sensor_noise * np.array([[1]])
-    S = np.zeros(shape=(state_dim, obs_dim))
     x0= np.array([0.0, 0.0], dtype=np.float64) 
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 # Falling with constant acceleration. Velocity can be driven. Only position is observed.
 # Process noise only affects the velocity. Sensor noise on the position.
@@ -115,12 +111,11 @@ def accel_params(start_height=20, accel=-10, process_noise=0.001, sensor_noise=0
     C = np.array([[1, 0, 0]]) # only the position can be observed
     Q = process_noise * np.eye(state_dim)
     R = sensor_noise * np.eye(obs_dim)
-    S = np.zeros(shape=(state_dim, obs_dim))
     x0= np.array([start_height, 0, accel]) 
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 # i-th order stable system
-def stable_sys_params(rng, order_n=3, input_dim=1, process_noise=1e-3, sensor_noise=1e-4):
+def stable_sys_params(rng, order_n=3, process_noise=1e-3, sensor_noise=1e-4):
     # Generate a stable or marginally stable system of state_dim, with input_dim-dimensional inputs
     diag = np.zeros(shape=(order_n, order_n))
 
@@ -133,8 +128,7 @@ def stable_sys_params(rng, order_n=3, input_dim=1, process_noise=1e-3, sensor_no
         diag[2*i:2*(i+1),  2*i:2*(i+1)] = block
     
     # if n is odd: need to have one real eigenvalue
-    if order_n % 2 == 1: 
-        diag[-1, -1] = rng.random()*2 - 1
+    if order_n % 2 == 1: diag[-1, -1] = rng.random()*2 - 1
     
     P = rng.normal(size=(order_n, order_n))
 
@@ -144,11 +138,6 @@ def stable_sys_params(rng, order_n=3, input_dim=1, process_noise=1e-3, sensor_no
     C = np.eye(obs_dim, state_dim) # State fully observed
     Q = process_noise * np.eye(state_dim) # Covariance matrix of process noise
     R = sensor_noise * np.eye(obs_dim) # Covariance matrix of sensor noise
-    S = np.zeros(shape=(state_dim, obs_dim))
-    # x0: Allow a mixture of initializations: 
-    #   20% chance of being at zero, 
-    #   50% chance of being at steady state, 
-    #   30% chance of being at a random multivariate normal
     rand = rng.random()
     if rand < 0.2: x0 = np.zeros(order_n, dtype=np.float64); # Starting state at zero
     elif rand < 0.7: # starting state at steady state (start at 0, burn 100 samples)
@@ -158,8 +147,7 @@ def stable_sys_params(rng, order_n=3, input_dim=1, process_noise=1e-3, sensor_no
             x0 = A @ x0 + w_t
     else: x0 = rng.multivariate_normal(mean=np.zeros(state_dim), cov=Q)
     x0 = np.zeros(state_dim)
-    # print("x0 is", x0)
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 # order_n system with nontrivial jordan blocks
 def nontrivial_sys_params(rng, order_n=3, process_noise=1e-3, sensor_noise=1e-4):
@@ -177,7 +165,7 @@ def nontrivial_sys_params(rng, order_n=3, process_noise=1e-3, sensor_noise=1e-4)
                 eig = rng.random() * 2 - 1 # random number between -1 and 1
                 mult = order_n+1
                 while mult + curr_eig_index > order_n: # rejection sample if we go over
-                    mult = rng.poisson(lam=1) + 1# Poisson random variable to determine the multiplicity of the eigenvalue
+                    mult = rng.poisson(lam=1) + 1 # Poisson random variable to determine the multiplicity of the eigenvalue
                 # print("Placing eigenvalue", eig, "with multiplicity", mult)
                 for i in range(mult):
                     diag[curr_eig_index, curr_eig_index] = eig
@@ -198,14 +186,13 @@ def nontrivial_sys_params(rng, order_n=3, process_noise=1e-3, sensor_noise=1e-4)
     C = np.eye(obs_dim, state_dim) # State fully observed
     Q = process_noise * np.eye(state_dim) # Covariance matrix of process noise
     R = sensor_noise * np.eye(obs_dim) # Covariance matrix of sensor noise
-    S = np.zeros(shape=(state_dim, obs_dim))
     x0 = np.zeros(order_n, dtype=np.float64) # Starting state
-    return A, C, Q, R, S, x0, state_dim, obs_dim
+    return A, C, Q, R, x0, state_dim, obs_dim
 
 class TestSystems(unittest.TestCase):
 
     def test_so2_params(self):
-        A, C, Q, R, S, x0, state_dim, obs_dim = so2_params(angle=1, process_noise=0.001, sensor_noise=0.01)
+        A, C, Q, R, x0, state_dim, obs_dim = so2_params(angle=1, process_noise=0.001, sensor_noise=0.01)
         self.assertTrue(np.allclose(A, np.array([[0.999847695, -0.017452406], [0.017452406, 0.999847695]])))
         self.assertTrue(np.allclose(C, np.array([[1, 0], [0, 1]])))
         self.assertTrue(np.allclose(Q, np.array([[0.001, 0], [0, 0.001]])))
@@ -215,7 +202,7 @@ class TestSystems(unittest.TestCase):
         self.assertEqual(obs_dim, 2)
 
     def test_so3_params(self):
-        A, C, Q, R, S, x0, state_dim, obs_dim = so3_params(angle=1, axis=np.array([1, 0, 0]), process_noise=0.001, sensor_noise=0.01)
+        A, C, Q, R, x0, state_dim, obs_dim = so3_params(angle=1, axis=np.array([1, 0, 0]), process_noise=0.001, sensor_noise=0.01)
         self.assertTrue(np.allclose(A, np.array([[1, 0, 0], [0, 0.999847695, -0.017452406], [0, 0.017452406, 0.999847695]])))
         self.assertTrue(np.allclose(C, np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])))
         self.assertTrue(np.allclose(Q, np.array([[0.001, 0, 0], [0, 0.001, 0], [0, 0, 0.001]])))
@@ -225,19 +212,18 @@ class TestSystems(unittest.TestCase):
         self.assertEqual(obs_dim, 3)
 
     def test_smd_params(self):
-        A, C, Q, R, S, x0, state_dim, obs_dim = smd_params()
+        A, C, Q, R, x0, state_dim, obs_dim = smd_params()
         self.assertTrue(np.allclose(A, np.array([[ 0.99753086,  0.04938272],
                                                  [-0.04938272,  0.98765432]])))
         self.assertTrue(np.allclose(C, np.array([[1, 0]])))
         self.assertTrue(np.allclose(Q, np.array([[0.0001, 0], [0, 0.0001]])))
         self.assertTrue(np.allclose(R, np.array([[0.01]])))
-        self.assertTrue(np.allclose(S, np.array([[0, ]])))
         self.assertTrue(np.allclose(x0, np.array([1.0, 0.0])))
         self.assertEqual(state_dim, 2)
         self.assertEqual(obs_dim, 1)
 
     def test_motion_params(self):
-        A, C, Q, R, S, x0, state_dim, obs_dim = motion_params()
+        A, C, Q, R, x0, state_dim, obs_dim = motion_params()
         self.assertTrue(np.allclose(A, np.array([[1.0, 0.001], [0.0, 1.0]])))
         self.assertTrue(np.allclose(C, np.array([[1, 0]])))
         self.assertTrue(np.allclose(Q, [[0, 0], [0, 1]]))
@@ -247,33 +233,31 @@ class TestSystems(unittest.TestCase):
         self.assertEqual(obs_dim, 1)
 
     def test_accel_params(self):
-        A, C, Q, R, S, x0, state_dim, obs_dim = accel_params()
+        A, C, Q, R, x0, state_dim, obs_dim = accel_params()
         self.assertTrue(np.allclose(A, np.array([[1, 0.001, 0], [0.0, 1.0, 0.001], [0.0, 0.0, 1.0]])))
         self.assertTrue(np.allclose(C, np.array([[1, 0, 0]])))
         self.assertTrue(np.allclose(Q, np.array([[0.001, 0, 0], [0, 0.001, 0], [0, 0, 0.001]])))
         self.assertTrue(np.allclose(R, np.array([[0.1]])))
-        self.assertTrue(np.allclose(S, np.array([[0], [0], [0]])))
         self.assertTrue(np.allclose(x0, [20, 0, -10]))
         self.assertEqual(state_dim, 3)
         self.assertEqual(obs_dim, 1)
 
     def test_stable_sys_params(self):
         rng = np.random.default_rng(seed=0)
-        A, C, Q, R, S, x0, state_dim, obs_dim = stable_sys_params(rng)
+        A, C, Q, R, x0, state_dim, obs_dim = stable_sys_params(rng)
         self.assertTrue(np.allclose(A, np.array([[ 0.54467934, 0.80731238, 0.94897699],
                                                 [ 0.0094852,  -0.99323337, -1.36323226],
                                                 [-0.71595766, -0.32024279, -0.10692609]])))
         self.assertTrue(np.allclose(C, np.array([[1., 0., 0.], [0., 1., 0.], [0, 0, 1]])))
         self.assertTrue(np.allclose(Q, [[0.001, 0, 0], [0, 0.001, 0], [0, 0, 0.001]]))
         self.assertTrue(np.allclose(R, [[0.0001, 0., 0.], [0., 0.0001, 0.], [0., 0., 0.0001]]))
-        self.assertTrue(np.allclose(S, [[0, 0, 0], [0, 0, 0], [0, 0, 0]]))
         self.assertTrue(np.allclose(x0, [0., 0., 0.]))
         self.assertEqual(state_dim, 3)
         self.assertEqual(obs_dim, 3)
 
     def test_nontrivial_sys_params(self):
         rng = np.random.default_rng(seed=0)
-        A, C, Q, R, S, x0, state_dim, obs_dim = nontrivial_sys_params(rng)
+        A, C, Q, R, x0, state_dim, obs_dim = nontrivial_sys_params(rng)
         self.assertTrue(np.allclose(A, np.array([[0.34488042, -1.01989897, -0.94507362], 
                                                  [-0.94292546, -3.62689264, -2.85436305], 
                                                  [ 1.49062263, 4.80473937, 4.14196006]])))

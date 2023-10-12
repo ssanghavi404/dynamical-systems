@@ -45,7 +45,6 @@ class KfModel:
         self.name = 'KalmanFilter'
         self.A, self.C, self.Q, self.R, self.x0 = A, C, Q, R, x0
     def __call__(self, ys):
-        print("ys has shape", ys.shape)
         recv = np.zeros_like(ys)
         traj_len, num_traj, obs_dim = ys.shape
         for trajNum in range(num_traj):
@@ -61,7 +60,6 @@ class IdKfModel:
         self.x0 = x0
 
     def __call__(self,  ys):
-        print("ys has shape", ys.shape)
         traj_len, num_traj, obs_dim  = ys.shape
         recv = np.zeros_like(ys)
         for i in range(num_traj):
