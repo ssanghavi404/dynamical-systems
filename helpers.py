@@ -35,7 +35,6 @@ def optimal_traj(A, C, Q, R, y):
     for i in range(T):
         v_hyp = xs[i, :] - C @ xs[i, :].T
         obj += cp.quad_form(v_hyp, Rinv) # ...and sum of sensor noises
-
     # Special handling for the first state
     w_hyp0 = xs[0, :] - A @ y[0, :]
     obj += cp.quad_form(w_hyp0, Qinv)

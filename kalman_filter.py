@@ -19,13 +19,16 @@ class KFilter:
         if state is None: self.state = np.zeros(self.state_size)
         else: self.state = state
 
-        self.prev_P = np.zeros((self.state_size, self.state_size))
-        self.P = np.zeros((self.state_size, self.state_size)) # covariance of observation at time t+1 given time t
+        self.prev_P = np.eye(self.state_size, self.state_size)
+
+        # covariance of observation at time t+1 given time t
+        self.P = np.eye(self.state_size, self.state_size) 
+        
         self.steady_state = False
 
         self.K = None # Kalman Gain, recalculated in update() function
     
-    def measure(self):
+    def measure(self): 
         return self.C @ self.state
 
     def predict(self):
@@ -43,12 +46,12 @@ class KFilter:
         self.state = self.state + self.K @ innovation
 
     def simulate(self, measurements):
-        T = measurements.shape[0]
-        states = np.zeros(shape=(T, self.state_size))
+        T = measurements.shape[1]
+        states = np.zeros(shape=(self.state_size, T))
         for t in range(T):
             self.predict()
-            self.update(measurements[t], t)
-            states[t] = self.state
+            self.update(measurements[:, t], t)
+            states[:, t] = self.state
         return states
     
     def run_till_ss(self):
@@ -60,7 +63,6 @@ class KFilter:
             self.update(np.zeros(self.obs_size,))
         self.state = state_init
         return i
-
 
 # class LearnedKF:
 #     def __init__(self, state_dim, obs_dim=None, x0=None, optim='adam', lr=1e-2):

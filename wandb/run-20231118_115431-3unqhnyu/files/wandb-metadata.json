@@ -1,0 +1,48 @@
+{
+    "os": "Darwin-22.3.0-x86_64-i386-64bit",
+    "python": "3.7.7",
+    "heartbeatAt": "2023-11-18T19:54:31.777390",
+    "startedAt": "2023-11-18T19:54:31.282580",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--traj_len",
+        "200"
+    ],
+    "state": "running",
+    "program": "train_test_gpt.py",
+    "codePathLocal": "train_test_gpt.py",
+    "codePath": "train_test_gpt.py",
+    "git": {
+        "remote": "https://github.com/ssanghavi404/dynamical-systems.git",
+        "commit": "c0efd5bd70ac055987cf591b352a195300f53541"
+    },
+    "email": "ssanghavi404@berkeley.edu",
+    "root": "/Users/sagarasanghavi/Desktop/Research/dynamical-systems",
+    "host": "MacBook-Pro.attlocal.net",
+    "username": "sagarasanghavi",
+    "executable": "/Users/sagarasanghavi/.pyenv/versions/3.7.7/bin/python",
+    "cpu_count": 10,
+    "cpu_count_logical": 10,
+    "cpu_freq": {
+        "current": 2400,
+        "min": 2400,
+        "max": 2400
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2400,
+            "min": 2400,
+            "max": 2400
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 460.4317207336426,
+            "used": 11.961345672607422
+        }
+    },
+    "memory": {
+        "total": 16.0
+    }
+}

@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "train_test_gpt.py", line 138, in <module>
+    main(params)
+  File "train_test_gpt.py", line 102, in main
+    train_single_system(model, args, A, C, Q, R, x0, state_dim, obs_dim)
+  File "train_test_gpt.py", line 42, in train_single_system
+    if os.path.exists(state_path): state = torch.load(state_path); model.load_state_dict(state['model_state_dict']); optimizer.load_state_dict(state['optimizer_state_dict']); return
+  File "/Users/sagarasanghavi/.pyenv/versions/3.7.7/lib/python3.7/site-packages/torch/nn/modules/module.py", line 1672, in load_state_dict
+    self.__class__.__name__, "\n\t".join(error_msgs)))
+RuntimeError: Error(s) in loading state_dict for GPTModel:
+	size mismatch for _backbone.wpe.weight: copying a param with shape torch.Size([300, 12]) from checkpoint, the shape in current model is torch.Size([200, 12]).

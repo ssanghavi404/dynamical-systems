@@ -6,28 +6,22 @@ import unittest
 from plotting import *
 
 # Given the system parameters and timelength, generate num_traj trajectories
-def generate_traj(num_traj, T, A, C, Q, R, S, x0, rng, state_dim=None, obs_dim=None):
+def generate_traj(num_traj, T, A, C, Q, R, x0, rng, state_dim=None, obs_dim=None):
     if state_dim is None: state_dim = A.shape[0]
     if obs_dim is None: obs_dim = C.shape[0]
 
     x = np.zeros(shape=(num_traj, state_dim, T+1))
-    for i in range(num_traj):
-        x[i, :, 0] = x0
+    for i in range(num_traj): x[i, :, 0] = x0
 
     y = np.zeros(shape=(num_traj, obs_dim, T+1))
-
-    Reig, Reigvec = np.linalg.eig(R - (np.linalg.inv(Q) @ S).T @ S)
-    sqR = Reigvec @ np.diag(np.sqrt(Reig)) @ np.linalg.inv(Reigvec)
 
     for i in range(num_traj):
         for t in range(T):
             w = rng.multivariate_normal(mean=np.zeros(state_dim), cov=Q)
-            v = (np.linalg.inv(Q) @ S).T @ w + sqR @ rng.multivariate_normal(mean=np.zeros(obs_dim), cov=np.eye(obs_dim))
-            
+            v = rng.multivariate_normal(mean=np.zeros(obs_dim), cov=R)
             x[i, :, t+1] = A @ x[i, :, t] + w
             y[i, :, t] = C @ x[i, :, t] + v
-        
-        v = (np.linalg.inv(Q) @ S).T @ w + sqR @ rng.multivariate_normal(mean=np.zeros(obs_dim), cov=np.eye(obs_dim))
+        v = rng.multivariate_normal(mean=np.zeros(obs_dim), cov=R)
         y[i, :, T] = C @ x[i, :, T] + v
 
     return x, y
@@ -65,7 +59,6 @@ def smd_params(mass=1, k_spring=1, b_damper=0.2, process_noise=0.0001, sensor_no
     m = mass # Mass
     k = k_spring # Spring Constant
     b = b_damper # Damping
-
     # State space is [[x], [xdot]]
     Ac = np.array([[ 0.0, 1.0], 
                    [-k/m, -b/m]]) # Continuous time dynamics

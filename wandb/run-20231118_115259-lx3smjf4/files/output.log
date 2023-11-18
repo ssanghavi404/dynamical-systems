@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/sagarasanghavi/.pyenv/versions/3.7.7/lib/python3.7/site-packages/matplotlib/backend_bases.py", line 1944, in enter_notify_event
+    def enter_notify_event(self, guiEvent=None, xy=None):
+KeyboardInterrupt

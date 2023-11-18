@@ -1,0 +1,174 @@
+import os
+import torch
+from torch import nn
+import numpy as np
+import argparse
+from matplotlib import pyplot as plt
+
+from models import *
+from trajectories import *
+from kalman_filter import *
+from plotting import *
+
+import wandb
+
+myDevice = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+rng = np.random.default_rng(seed=0)
+
+def train_step(model, xs, ys, optimizer, loss_func):
+    optimizer.zero_grad()
+    ys = torch.from_numpy(ys).to(myDevice, dtype=torch.float32).permute(2, 0, 1) # seq_len x batch_size x obs_dim
+    xs = torch.from_numpy(xs).to(myDevice, dtype=torch.float32).permute(2, 0, 1) # seq_len x batch_size x obs_dim
+    prediction = model(ys)
+    loss = loss_func(prediction, xs)
+    loss.backward()
+    # Gradient clipping, as done in https://discuss.huggingface.co/t/why-is-grad-norm-clipping-done-during-training-by-default/1866
+    nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2) 
+    optimizer.step()
+    return loss.detach().item()
+
+def train_single_system(model, args, A, C, Q, R, x0, state_dim, obs_dim): # Train a model to fit a single system, characterized by A, C, Q, R, x0, state_dim, obs_dim
+    model.train() # put model in training mode.
+    optimizer = {'adam': torch.optim.Adam(model.parameters(), lr=args['lr']), 'adamw': torch.optim.AdamW(model.parameters(), lr=args['lr'])}.get(args['optim'], torch.optim.SGD(model.parameters(), lr=args['lr']))
+    
+    state_path = os.path.join(args['save_path'], 'bert_order{0}_emb{1}_heads{2}_layers{3}_lr{4}_singleSys.pt'.format(args['order_n'], args['bert_n_embd'], args['bert_n_head'], args['bert_n_layer'], args['lr']))
+    if os.path.exists(state_path): state = torch.load(state_path); model.load_state_dict(state['model_state_dict']); optimizer.load_state_dict(state['optimizer_state_dict']); return 
+
+    loss_func = torch.nn.MSELoss()
+    S = np.zeros(shape=(obs_dim, obs_dim))
+    for i in range(args['num_iterations']):
+        # Generate new training data each iteration
+        x, y = generate_traj(args['batch_size'], args['traj_len'], A, C, Q, R, x0, rng, state_dim, obs_dim)
+        curr_loss = train_step(model, x, y, optimizer, loss_func)
+        wandb.log({"Iteration": i, "Loss": curr_loss})
+
+    torch.save({"model_state_dict": model.state_dict(),  "optimizer_state_dict": optimizer.state_dict()}, state_path)
+    
+
+# def train_stable_sys(model, args): # Train a model to fit multiple stable systems, whose eigenvalues are randomly chosen in cc pairs within the unit circle
+#     model.train() # Put model in training mode.
+#     optimizer = {'adam': torch.optim.Adam(model.parameters(), lr=args['lr']), 'adamw': torch.optim.AdamW(model.parameters(), lr=args['lr'])}.get(args['optim'], torch.optim.SGD(model.parameters(), lr=args['lr']))
+    
+#     state_path = os.path.join(args['save_path'], 'bert_order{0}_emb{1}_heads{2}_layers{3}_lr{4}_stableSys.pt'.format(args['order_n'], args['bert_n_embd'], args['bert_n_head'], args['bert_n_layer'], args['lr']))
+#     if os.path.exists(state_path): state = torch.load(state_path); model.load_state_dict(state['model_state_dict']); optimizer.load_state_dict(state['optimizer_state_dict']); return
+    
+#     loss_func = torch.nn.MSELoss()
+#     for i in range(args['num_iterations']):
+#         x, y = np.zeros(shape=(args['batch_size'], args['order_n'], args['traj_len'] + 1)), np.zeros(shape=(args['batch_size'], args['order_n'], args['traj_len'] + 1))
+#         # Different systems
+#         for traj_num in range(args['batch_size']):
+#             A, C, Q, R, x0, state_dim, obs_dim = stable_sys_params(rng, order_n=args['order_n'])
+#             x[traj_num], y[traj_num] = generate_traj(1, args['traj_len'], A, C, Q, R, x0, rng, state_dim, obs_dim)
+#         curr_loss = train_step(model, x, y, optimizer, loss_func)
+#         wandb.log({"Iteration": i, "Loss": curr_loss})
+
+#     torch.save( {"model_state_dict": model.state_dict(),  "optimizer_state_dict": optimizer.state_dict()}, state_path)
+
+# def train_nontrivial_sys(model, args): # Train a BERT model to fit multiple nontrivial jordan block systems, whose eigenvalues are randomly chosen on the unit circle.
+#     model.train()
+#     optimizer = {'adam': torch.optim.Adam(model.parameters(), lr=args['lr']), 'adamw': torch.optim.AdamW(model.parameters(), lr=args['lr'])}.get(args['optim'], torch.optim.SGD(model.parameters(), lr=args['lr']))
+
+#     state_path = os.path.join(args['save_path'], 'bert_order{0}_emb{1}_heads{2}_layers{3}_lr{4}_nontrivialSys.pt'.format(args['order_n'], args['bert_n_embd'], args['bert_n_head'], args['bert_n_layer'], args['lr']))
+#     if os.path.exists(state_path): state = torch.load(state_path); model.load_state_dict(state['model_state_dict']); optimizer.load_state_dict(state['optimizer_state_dict']); return
+    
+#     loss_func = torch.nn.MSELoss()
+#     for i in range(args['num_iterations']):
+#         x, y = np.zeros(shape=(args['batch_size'], args['order_n'], args['traj_len'] + 1)), np.zeros(shape=(args['batch_size'], args['order_n'], args['traj_len'] + 1))
+#         S = np.zeros(shape=(args['order_n'],  args['order_n']))
+#         # Different systems
+#         for traj_num in range(args['batch_size']):
+#             A, C, Q, R, x0, state_dim, obs_dim = nontrivial_sys_params(rng, order_n=args['order_n'])
+#             x[traj_num], y[traj_num] = generate_traj(1, args['traj_len'], A, C, Q, R, S, x0, rng, state_dim, obs_dim)
+#         curr_loss = train_step(model, y, optimizer, loss_func)
+#         wandb.log({"Iteration": i, "Loss": curr_loss})
+#     torch.save({"model_state_dict": model.state_dict(), "optimizer_state_dict": optimizer.state_dict()}, state_path)
+    
+def visualize(trained_model, args, A=None, C=None, Q=None, R=None, x0=None, state_dim=None, obs_dim=None):
+    trained_model.eval()
+    S = np.zeros(shape=(args['order_n'], args['order_n']))
+
+    if A is not None:
+        x, y = generate_traj(args['num_tests'], args['traj_len'], A, C, Q, R, x0, rng, state_dim, obs_dim)
+    else:
+        x, y = np.zeros(shape=(args['num_tests'], args['order_n'], args['traj_len'] + 1)), np.zeros(shape=(args['num_tests'], args['order_n'], args['traj_len'] + 1))
+        for traj_num in range(args['num_tests']):
+            if args['env_name'] == 'stable_sys': A, C, Q, R, x0, state_dim, obs_dim = stable_sys_params(rng, order_n=args['order_n'])
+            elif args['env_name'] == 'nontrivial_sys': A, C, Q, R, x0, state_dim, obs_dim = nontrivial_sys_params(rng, order_n=args['order_n'])
+            x[traj_num], y[traj_num] = generate_traj(1, args['traj_len'], A, C, Q, R, S, x0, rng, state_dim, obs_dim)    
+
+    # Plot error per timestep.
+    plt.figure()
+    plt.title("Error per timestep") 
+    plt.xlabel("Timestep")
+    plt.ylabel("Error")
+
+    # All tensors should have shape (batch_size, seq_len, state_dim)
+    input_ys = torch.tensor(y).to(myDevice, dtype=torch.float32).permute(2, 0, 1)
+    recv_bert = trained_model(input_ys).detach().cpu().numpy()
+    true_values = torch.tensor(x).permute(2, 0, 1).detach().cpu().numpy()
+    err_ys_bert = np.linalg.norm(recv_bert - true_values, axis=2)
+    medians = np.quantile(err_ys_bert, 0.5, axis=1)
+    plt.scatter(range(len(medians)), medians, label='Median Error of Bert')
+    for baseline_model in get_relevant_baselines('truestates_recovery', A, C, Q, R, x0, None):
+        print('baseline model', baseline_model.name)
+        recv_baseline = baseline_model(input_ys.detach().cpu().numpy())
+        errs_ys_baseline = np.linalg.norm(recv_baseline - true_values, axis=1)
+        medians = np.quantile(errs_ys_baseline, 0.5, axis=1)
+        plt.scatter(range(len(medians)), medians, label='Median Error of {0}'.format(baseline_model.name))
+    plt.legend()
+    plt.show()
+
+
+    # Plot the actual trajectroies
+    plt.figure()
+    plt.scatter(y[0, 0, :], y[0, 1, :], label='True Ys')
+    plt.scatter(x[0, 0, :], y[0, 1, :], label='True Xs')
+    recv = trained_model(input_ys).permute(0, 2, 1).detach().cpu().numpy()
+    plt.scatter(recv[0, 0, :], recv[0, 1, :], label='Recovered by BERT')
+    for baseline_model in get_relevant_baselines('truestates_recovery', A, C, Q, R, x0, None):
+        recv = baseline_model(input_ys.detach().cpu().numpy())
+        plt.scatter(recv[:, 0, 0], recv[:, 0, 1], label='Baseline {0}'.format(baseline_model.name))
+    plt.legend()
+    plt.show()
+    
+
+def main(args):
+    run = wandb.init(project='dynamical-systems',
+        config={'env_name': args['env_name'], 'learning rate': args['lr'], 'iterations':args['num_iterations'], 'optimizer':args['optim'], 'batchsize':args['batch_size'],
+            'bert_n_embd':args['bert_n_embd'], 'bert_n_layer':args['bert_n_layer'], 'bert_n_head':args['bert_n_head']})
+    model = BERTModel(n_dims_token=args['order_n'], n_positions=args['traj_len'], n_embd=args['bert_n_embd'], n_layer=args['bert_n_layer'], n_head=args['bert_n_head'])
+    if args['env_name'] == 'so2':
+        A, C, Q, R, x0, state_dim, obs_dim = so2_params()
+        train_single_system(model, args, A, C, Q, R, x0, state_dim, obs_dim)
+        visualize(model, args, A, C, Q, R, x0, state_dim, obs_dim)
+    elif args['env_name'] == 'stable_sys':
+        train_stable_sys(model, args)
+        visualize(model, args)
+    elif args['env_name'] == 'nontrivial_sys':
+        train_nontrivial_sys(model, args)
+        visualize(model, args)
+    else: print('Invalid env_name')
+    wandb.finish()
+    
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--env_name', type=str, default='so2', 
+        choices=('stable_sys', 'nontrivial_sys', 'so2', 'so3', 'smd', 'motion', 'accel')
+    )
+    parser.add_argument('--num_tests', type=int, default=100)
+    parser.add_argument('--traj_len', type=int, default=200)
+    parser.add_argument('--order_n', type=int, default=2)
+
+    parser.add_argument('--bert_n_embd', type=int, default=12)
+    parser.add_argument('--bert_n_layer', type=int, default=4)
+    parser.add_argument('--bert_n_head', type=int, default=3)
+
+    parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--optim', type=str, default='adamw')
+    parser.add_argument('--num_iterations', type=int, default=300)
+    parser.add_argument('--save_path', type=str, default='./results/')
+
+    # convert to dictionary
+    params = vars(parser.parse_args())
+    main(params)
