@@ -59,6 +59,7 @@ def smd_params(mass=1, k_spring=1, b_damper=0.2, process_noise=0.0001, sensor_no
     m = mass # Mass
     k = k_spring # Spring Constant
     b = b_damper # Damping
+
     # State space is [[x], [xdot]]
     Ac = np.array([[ 0.0, 1.0], 
                    [-k/m, -b/m]]) # Continuous time dynamics

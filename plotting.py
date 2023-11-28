@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
+import os
 
 sns.set_theme("notebook", "darkgrid")
 palette = sns.color_palette("colorblind")
 
-def plot(metrics, title, num_iterations):
+def plot(metrics, args, title):
     fig, ax = plt.subplots(1, 1)
 
     color = 0
@@ -24,6 +25,9 @@ def plot(metrics, title, num_iterations):
     for line in legend.get_lines():
         line.set_linewidth(3)
 
-    plt.savefig('gpt_iterations{0}'.format(num_iterations))
+    graph_path = os.path.join(args['graph_path'], '{0}_order{1}_emb{2}_heads{3}_layers{4}_lr{5}_stableSys{6}_numIt{7}.jpg'.format(
+                                args['transformer_type'], args['order_n'], args['transformer_n_embd'], args['transformer_n_head'], 
+                                args['transformer_n_layer'], args['lr'], args['env_name'], args['num_iterations']))
+    plt.savefig(graph_path)
     plt.show()
     return fig, ax

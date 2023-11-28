@@ -1,0 +1,50 @@
+{
+    "os": "Darwin-22.3.0-x86_64-i386-64bit",
+    "python": "3.7.7",
+    "heartbeatAt": "2023-11-28T00:04:44.107059",
+    "startedAt": "2023-11-28T00:04:43.746373",
+    "docker": null,
+    "cuda": null,
+    "args": [
+        "--traj_len",
+        "300",
+        "--transformer_type",
+        "bert"
+    ],
+    "state": "running",
+    "program": "train_test_transformer.py",
+    "codePathLocal": "train_test_transformer.py",
+    "codePath": "train_test_transformer.py",
+    "git": {
+        "remote": "https://github.com/ssanghavi404/dynamical-systems.git",
+        "commit": "5e7fccdbe9e5e5ad82b979dfcc2c993a690676ed"
+    },
+    "email": "ssanghavi404@berkeley.edu",
+    "root": "/Users/sagarasanghavi/Desktop/Research/dynamical-systems",
+    "host": "wifi-10-41-125-139.wifi.berkeley.edu",
+    "username": "sagarasanghavi",
+    "executable": "/Users/sagarasanghavi/.pyenv/versions/3.7.7/bin/python",
+    "cpu_count": 10,
+    "cpu_count_logical": 10,
+    "cpu_freq": {
+        "current": 2400,
+        "min": 2400,
+        "max": 2400
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 2400,
+            "min": 2400,
+            "max": 2400
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 460.4317207336426,
+            "used": 14.239994049072266
+        }
+    },
+    "memory": {
+        "total": 16.0
+    }
+}
