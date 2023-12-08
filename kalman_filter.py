@@ -14,7 +14,6 @@ class KFilter:
         self.R = R # covariance of w (sensor noise)
 
         self.state_size, self.obs_size = A.shape[0], C.shape[0] 
-        
         self.state = state if state is not None else np.zeros(self.state_size)
 
         self.prev_P = np.eye(self.state_size, self.state_size)        
@@ -29,8 +28,8 @@ class KFilter:
     def predict(self):
         self.prev_P = copy.deepcopy(self.P)
         self.state = self.A @ self.state
-        self.P = self.A @ self.prev_P @ self.A.T + self.Q
-        
+        self.P = self.A @ self.prev_P @ self.A.T + self.Q 
+
     def update(self, measurement, t=0):
         if not self.steady_state:
             self.K = self.P @ self.C.T @ np.linalg.inv(self.C @ self.P @ self.C.T + self.R)

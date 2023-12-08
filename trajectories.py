@@ -5,7 +5,7 @@ import unittest
 
 from plotting import *
 
-# Given the system parameters and timelength, generate num_traj trajectories
+# Given the system parameters and timelength, generate num_traj
 def generate_traj(num_traj, T, A, C, Q, R, x0, rng, state_dim=None, obs_dim=None):
     if state_dim is None: state_dim = A.shape[0]
     if obs_dim is None: obs_dim = C.shape[0]
@@ -33,7 +33,7 @@ def so2_params(angle=1, process_noise=0.001, sensor_noise=0.01):
     state_dim = 2
     obs_dim = 2
     A = np.array([[np.cos(theta), -np.sin(theta)], # state transition matrix
-                [np.sin(theta),  np.cos(theta)]]) # moving around a circle at 1 deg per timestep
+                  [np.sin(theta),  np.cos(theta)]]) # moving around a circle at 1 deg per timestep
     C = np.eye(obs_dim, state_dim) # State fully observed
     Q = process_noise * np.eye(state_dim) # Covariance matrix of process noise
     R = sensor_noise * np.eye(obs_dim) # Covariance matrix of sensor noise

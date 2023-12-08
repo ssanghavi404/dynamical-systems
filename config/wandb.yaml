@@ -1,0 +1,5 @@
+wandb:
+  project: dynamical-systems
+  entity: saagar
+  notes:
+  log_every_steps: 100

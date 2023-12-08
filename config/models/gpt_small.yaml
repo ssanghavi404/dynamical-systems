@@ -1,0 +1,5 @@
+model:
+  family: gpt
+  n_embd: 32
+  n_layer: 3
+  n_head: 2

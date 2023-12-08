@@ -16,7 +16,7 @@ def plot(metrics, args, title):
         ax.fill_between(range(len(low)), low, high, alpha=0.2)
         color += 1
     ax.set_xlabel("Timestep in Trajectory")
-    ax.set_ylabel("Median Error at Timestep (IQR shaded)")
+    ax.set_ylabel("Median Error at Timestep")
     ax.set_xlim(-1, len(low) + 0.1)
     ax.set_title(label=title)
 
@@ -25,9 +25,9 @@ def plot(metrics, args, title):
     for line in legend.get_lines():
         line.set_linewidth(3)
 
-    graph_path = os.path.join(args['graph_path'], '{0}_order{1}_emb{2}_heads{3}_layers{4}_lr{5}_stableSys{6}_numIt{7}.jpg'.format(
-                                args['transformer_type'], args['order_n'], args['transformer_n_embd'], args['transformer_n_head'], 
-                                args['transformer_n_layer'], args['lr'], args['env_name'], args['num_iterations']))
+    graph_path = os.path.join(args.training.graph_path, '{0}_order{1}_emb{2}_heads{3}_layers{4}_lr{5}_stableSys{6}_numIt{7}.jpg'.format(
+                                args.model.family, args.training.order_n, args.model.n_embd, args.model.n_head, 
+                                args.model.n_layer, args.training.lr, args.training.env_name, args.training.num_iterations))
     plt.savefig(graph_path)
     plt.show()
     return fig, ax

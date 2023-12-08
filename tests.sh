@@ -1,5 +1,9 @@
-python train_test_gpt.py --traj_len 300 --num_iterations 100
-python train_test_gpt.py --traj_len 300 --num_iterations 200
-python train_test_gpt.py --traj_len 300 --num_iterations 300
-python train_test_gpt.py --traj_len 300 --num_iterations 400
-python train_test_gpt.py --traj_len 300 --num_iterations 500
+python train_test_transformer.py --traj_len 10 --num_iterations 1000 --matrix_dim 2dim
+python train_test_transformer.py --traj_len 100 --num_iterations 1000 --matrix_dim 2dim
+python train_test_transformer.py --traj_len 1000 --num_iterations 10000 --matrix_dim 2dim
+python train_test_transformer.py --traj_len 10000 --num_iterations 10000 --matrix_dim 2dim
+python train_test_transformer.py --traj_len 100000 --num_iterations 10000 --matrix_dim 2dim
+python train_test_transformer.py --traj_len 1000000 --num_iterations 100000 --matrix_dim 2dim
+
+
+

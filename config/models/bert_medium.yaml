@@ -1,0 +1,5 @@
+model:
+  family: bert
+  n_embd: 64
+  n_layer: 6
+  n_head: 4
