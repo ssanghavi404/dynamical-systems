@@ -1,3 +1,4 @@
+# Adapted from UC Berkeley EE 126 - Credit: Kannan Ramachandran
 import copy
 import numpy as np
 import torch

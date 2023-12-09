@@ -26,8 +26,8 @@ def plot(metrics, args, title):
         line.set_linewidth(3)
 
     graph_path = os.path.join(args.training.graph_path, '{0}_order{1}_emb{2}_heads{3}_layers{4}_lr{5}_stableSys{6}_numIt{7}.jpg'.format(
-                                args.model.family, args.training.order_n, args.model.n_embd, args.model.n_head, 
-                                args.model.n_layer, args.training.lr, args.training.env_name, args.training.num_iterations))
+                                args.model.family, args.task.order_n, args.model.n_embd, args.model.n_head, 
+                                args.model.n_layer, args.training.lr, args.task.env_name, args.training.num_iterations))
     plt.savefig(graph_path)
     plt.show()
     return fig, ax

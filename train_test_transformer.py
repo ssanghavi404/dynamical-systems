@@ -19,23 +19,22 @@ import wandb
 myDevice = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 rng = np.random.default_rng(seed=0)
 
-def train_step_gpt(model, ys, optimizer, loss_func):
+def train_step_gpt(model, ys, optimizer, criterion):
     optimizer.zero_grad()
-    # Input and output both have shape (batch_size, seq_len, d_curr)
     y_input = torch.from_numpy(ys[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(0, 2, 1) # batch_size x traj_len x obs_dim
     y_output = torch.from_numpy(ys[:, :, 1:]).to(myDevice, dtype=torch.float32).permute(0, 2, 1) # batch_size x traj_len x obs_dim
     pred = model(y_input)
-    loss = loss_func(pred, y_output)
+    loss = criterion(pred, y_output)
     loss.backward()
     optimizer.step()
     return loss.detach().item()
 
-def train_step_bert(model, xs, ys, optimizer, loss_func):
+def train_step_bert(model, xs, ys, optimizer, criterion):
     optimizer.zero_grad()
-    ys = torch.from_numpy(ys[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(0, 2, 1) # batch_size x seq_len x obs_dim
-    xs = torch.from_numpy(xs[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(0, 2, 1) # batch_size x seq_len x obs_dim
+    ys = torch.from_numpy(ys[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(0, 2, 1) # batch_size x traj_len x obs_dim
+    xs = torch.from_numpy(xs[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(0, 2, 1) # batch_size x traj_len x obs_dim
     pred = model(ys)
-    loss = loss_func(pred, xs)
+    loss = criterion(pred, xs)
     loss.backward()
     # Gradient clipping, as done in https://discuss.huggingface.co/t/why-is-grad-norm-clipping-done-during-training-by-default/1866
     nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0, norm_type=2) 
@@ -49,23 +48,21 @@ def train_single_system(model, args, A, C, Q, R, x0, state_dim, obs_dim):
     optimizer = {'adam': torch.optim.Adam, 'adamw': torch.optim.AdamW, 'sgd': torch.optim.SGD}.get(args.training.optim)(model.parameters(), lr=args.training.lr)
     
     starting_step = 0
-    state_path = os.path.join(args.training.save_path, '{0}_order{1}_emb{2}_heads{3}_layers{4}_lr{5}_singleSys.pt'.format(args.model.family, args.task.order_n, args.model.n_embd, args.model.n_head, args.model.n_layer, args.training.lr))
-    print("args", args.training.save_path)
-    print("state_path", state_path)
+    state_path = os.path.join(args.training.save_path, '{0}_order{1}_emb{2}_heads{3}_layers{4}_lr{5}_singleSys.pt'.format(args.model.family, args.task.order_n or args.task.matrix_dim, args.model.n_embd, args.model.n_head, args.model.n_layer, args.training.lr))
     if os.path.exists(state_path): 
         state = torch.load(state_path)
         model.load_state_dict(state['model_state_dict'])
         optimizer.load_state_dict(state['optimizer_state_dict'])
         starting_step = state['train_step']
 
-    loss_func = torch.nn.MSELoss()
+    criterion = torch.nn.MSELoss()
     for i in tqdm(range(starting_step, args.training.num_iterations)):
         # Generate new training data each iteration
         x, y = generate_traj(args.training.batch_size, args.task.traj_len, A, C, Q, R, x0, rng, state_dim, obs_dim)
 
         # Training Step and Logging
-        if args.model.family == 'gpt': curr_loss = train_step_gpt(model, y, optimizer, loss_func)
-        elif args.model.family == 'bert': curr_loss = train_step_bert(model, x[:, :, :-1], y[:, :, :-1], optimizer, loss_func)
+        if args.model.family == 'gpt': curr_loss = train_step_gpt(model, y, optimizer, criterion)
+        elif args.model.family == 'bert': curr_loss = train_step_bert(model, x, y, optimizer, criterion)
 
         if i % args.wandb.log_every_steps == 0: wandb.log({'Iteration': i, 'Loss': curr_loss})
         if i % args.training.save_every_steps == 0: torch.save({"model_state_dict": model.state_dict(),  "optimizer_state_dict": optimizer.state_dict(), 'train_step': i}, state_path)
@@ -87,7 +84,7 @@ def train_general_system(model, args):
         optimizer.load_state_dict(state['optimizer_state_dict'])
         starting_step = state['train_step']
 
-    loss_func = torch.nn.MSELoss()
+    criterion = torch.nn.MSELoss()
     for i in tqdm(range(starting_step, args.training.num_iterations)):
         
         # Generate batch_size trajectories that each come from different systems
@@ -100,8 +97,8 @@ def train_general_system(model, args):
             x[traj_num], y[traj_num] = generate_traj(1, args.task.traj_len, A, C, Q, R, x0, rng, state_dim)
 
         # Train Step and Logging
-        if args.model.family == 'gpt': curr_loss = train_step_gpt(model, y, optimizer, loss_func)
-        elif args.model.family == 'bert': curr_loss = train_step_bert(model, x, y, optimizer, loss_func)
+        if args.model.family == 'gpt': curr_loss = train_step_gpt(model, y, optimizer, criterion)
+        elif args.model.family == 'bert': curr_loss = train_step_bert(model, x, y, optimizer, criterion)
         if i % args.wandb.log_every_steps == 0: wandb.log({'Iteration': i, 'Loss': curr_loss})
         if i % args.training.save_every_steps == 0: torch.save({"model_state_dict": model.state_dict(),  "optimizer_state_dict": optimizer.state_dict(), 'train_step': i}, state_path)
 
@@ -114,20 +111,33 @@ def visualize(trained_model, args, A=None, C=None, Q=None, R=None, x0=None, stat
         x, y = generate_traj(args.num_tests, args.task.traj_len, A, C, Q, R, x0, rng, state_dim, obs_dim)
     else:
         x, y = np.zeros(shape=(args.num_tests, args.task.order_n, args.task.traj_len)), np.zeros(shape=(args.num_tests, args.task.order_n, args.task.traj_len))
+
+        # Different systems for each test trajectory
         for traj_num in range(args.num_tests):
             if args.task.env_name == 'stable_sys': A, C, Q, R, x0, state_dim, obs_dim = stable_sys_params(rng, order_n=args.task.order_n)
             elif args.task.env_name == 'nontrivial_sys': A, C, Q, R, x0, state_dim, obs_dim = nontrivial_sys_params(rng, order_n=args.task.order_n)
             elif args.task.env_name == 'so2': A, C, Q, R, x0, state_dim, obs_dim = so2_params()
             x[traj_num], y[traj_num] = generate_traj(1, args.task.traj_len, A, C, Q, R, x0, rng, state_dim, obs_dim)   
 
+
     # All tensors should have shape (batch_size, seq_len, state_dim)
+    print("y has shape", y.shape)
+    print("y", y.shape)
     input_ys = torch.tensor(y[:, :, :-1]).to(myDevice, dtype=torch.float32).permute(0, 2, 1)
+    print("input_ys", input_ys.shape)
+    print("input_ys[0]", input_ys[0])
     recv = trained_model(input_ys).detach().cpu().numpy()
+
+    print("recv has shape", recv.shape)
+    print("recv[0]", recv[0])
 
     if args.model.family == 'gpt': true_values = torch.tensor(y[:, :, 1:]).permute(0, 2, 1).detach().cpu().numpy()
     elif args.model.family == 'bert': true_values = torch.tensor(x[:, :, :-1]).permute(0, 2, 1).detach().cpu().numpy()
 
+    print("True values has shape", true_values.shape)
+
     errs = np.linalg.norm(recv - true_values, axis=2)
+    print("Errs has shape", errs)
     # Plot the errors over time
     metrics = {"Transformer": {'med': np.quantile(errs, 0.5, axis=0),
                               'q1': np.quantile(errs, 0.25, axis=0),
@@ -135,14 +145,22 @@ def visualize(trained_model, args, A=None, C=None, Q=None, R=None, x0=None, stat
     taskname = {'gpt':'nextstate_prediction', 'bert':'truestate_recovery'}[args.model.family]
 
     plt.figure()
-    plt.plot(*input_ys[0].T[:2], label="Ys")
-    plt.plot(*torch.tensor(x).permute(0, 2, 1).detach().cpu().numpy()[0].T[:2], label="Xs")
+    plt.plot(*true_values[0].T, label="Ys")
+    # plt.plot(*torch.tensor(x).permute(0, 2, 1).detach().cpu().numpy()[0].T[:2], label="Xs")
     plt.plot(*recv[0].T[:2], label="Recovered by Transformer")
-    for baseline_model in get_relevant_baselines(taskname, A, C, Q, R, x[:, :, 0], x[:, :, -1]):
+    for baseline_model in get_baselines(taskname, A, C, Q, R, x[:, :, 0], x[:, :, -1]):
         print("Model", baseline_model.name)
-        recv = baseline_model(y[:, :, :-1])
-        plt.plot(*recv[0], label="Recovered by {0}".format(baseline_model.name))
-        errs = np.linalg.norm(recv - y[:, :, 1:], axis=1)
+        recv = baseline_model(input_ys.detach().cpu().numpy())
+        print("Recv has shape", recv.shape)
+        print("true values", true_values.shape)
+        if args.model.family == 'gpt':
+            errs = np.linalg.norm(recv - true_values, axis=2)
+        elif args.model.family == 'bert':
+            errs = np.linalg.norm(np.array(recv - true_values, axis=2))
+        
+        print("errs has shape", errs.shape)
+        plt.plot(*recv[0].T, label="Recovered by {0}".format(baseline_model.name))
+        
         metrics[baseline_model.name] = {'med': list(np.quantile(errs, 0.5, axis=0)),
                                         'q1': list(np.quantile(errs, 0.25, axis=0)),
                                         'q3': list(np.quantile(errs, 0.75, axis=0))} 
@@ -162,7 +180,6 @@ def main(args):
 
     if args.task.matrix_dim is not None:
         A = np.loadtxt("./matrices/" + str(args.task.matrix_dim) + "dim_scalar_system_matrices" + ("_" + str(args.task.matrix_type) if args.task.matrix_type is not None else "") + "/A.out", delimiter=',')
-        print(("_" + str(args.task.matrix_type) if args.task.matrix_type is not None else ""))
         B = np.expand_dims(np.loadtxt("./matrices/" + str(args.task.matrix_dim) + "dim_scalar_system_matrices" + ("_" + str(args.task.matrix_type) if args.task.matrix_type is not None else "") + "/B.out", delimiter=','), axis=1) # Not used, should be zero
         C = np.expand_dims(np.loadtxt("./matrices/" + str(args.task.matrix_dim) + "dim_scalar_system_matrices" + ("_" + str(args.task.matrix_type) if args.task.matrix_type is not None else "") + "/C.out", delimiter=','), axis=0)
         state_dim, obs_dim = A.shape[0], C.shape[0]

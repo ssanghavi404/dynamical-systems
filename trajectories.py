@@ -6,6 +6,9 @@ import unittest
 from plotting import *
 
 # Given the system parameters and timelength, generate num_traj
+# The states will be of size 
+# x.shape = (num_traj, state_dim, T+1)
+# y.shape = (num_traj, obs_dim, T+1)
 def generate_traj(num_traj, T, A, C, Q, R, x0, rng, state_dim=None, obs_dim=None):
     if state_dim is None: state_dim = A.shape[0]
     if obs_dim is None: obs_dim = C.shape[0]

@@ -31,27 +31,25 @@ def build_transformer_model(config, state_dim, obs_dim):
         raise NotImplementedError
     return model
 
-def get_relevant_baselines(task_name, A, C, Q, R, start_states, end_states=None):
-    task_to_baselines = {
-        'nextstate_prediction': [
-            (ZeroPredictorModel, {'pred_dim': C.shape[1]}),
-            (PrevPredictorModel, {}),
-            (KfModel, {'A':A, 'C':C, 'Q':Q, 'R':R, 'start_states':start_states}),
-            #(LearnedKfModel, {}),
-            (IdKfModel, {'Q':Q, 'R':R, 'start_states':start_states})
-        ],  
-        'truestate_recovery': [
-            (ZeroPredictorModel, {'pred_dim': A.shape[0]}),
-            (LerpModel, {'state_dim': A.shape[0]}),
-            (KfSmoothedModel, {'A':A, 'C':C, 'Q':Q, 'R':R, 'start_states':start_states, 'end_states':end_states}),
-            (LSOptModel, {'A':A, 'C':C, 'Q':Q, 'R':R}),
+def get_baselines(task_name, A, C, Q, R, start_states, end_states=None):
+    if task_name == 'nextstate_prediction':
+        return [
+            ZeroPredictorModel(pred_dim=C.shape[0]),
+            PrevPredictorModel(),
+            KfModel(A=A, C=C, Q=Q, R=R, start_states=start_states),
+            # IdKfModel(Q=Q, R=R, start_states=start_states),
         ]
-    }
-    models = []
-    for model_cls, kwargs in task_to_baselines[task_name]:
-        models.append(model_cls(**kwargs))
-    return models
-
+    elif task_name == 'truestate_recovery':
+        return [
+            ZeroPredictorModel(pred_dim=A.shape[0]),
+            LerpModel(state_dim=A.shape[0]),
+            KfSmoothedModel(A=A, C=C, Q=Q, R=R, start_states=start_states, end_states=end_states),
+            LSOptModel(A=A, C=C, Q=Q, R=R),
+        ]
+    else:
+        print('Invalid taskname')
+        return []
+    
 class ZeroPredictorModel:
     # Predict 0 at each timestep
     def __init__(self, pred_dim):
@@ -59,8 +57,8 @@ class ZeroPredictorModel:
         self.pred_dim = pred_dim # size of the predictions (obs_dim for GPT, state_dim for BERT)
 
     def __call__(self, ys):
-        num_traj, obs_dim, traj_len = ys.shape
-        return np.zeros(shape=(num_traj, self.pred_dim, traj_len))
+        num_traj, traj_len, obs_dim = ys.shape
+        return np.zeros(shape=(num_traj, traj_len, self.pred_dim))
     
 class PrevPredictorModel:
     # Predict the previous token at each timestep. basl
@@ -71,17 +69,33 @@ class PrevPredictorModel:
         return ys
 
 class KfModel:
-    # Perform Kalman Filtering and use the receovered states at each timetep, with the known A, C, Q, R matrices
+    # Perform Kalman Filtering and use the recovered states at each timetep, with the known A, C, Q, R matrices
     def __init__(self, A, C, Q, R, start_states):
         self.name = 'KalmanFilter'
         self.A, self.C, self.Q, self.R, self.start_states = A, C, Q, R, start_states
     def __call__(self, ys):
-        num_traj, obs_dim, traj_len = ys.shape
+        num_traj, traj_len, obs_dim = ys.shape
         state_dim = self.A.shape[0]
-        recv = np.zeros(shape=(num_traj, state_dim, traj_len))
+        recv = np.zeros_like(ys) # Recovered Ys
         for trajNum in range(num_traj):
             kinematics = KFilter(self.A, self.C, self.Q, self.R, state=self.start_states[trajNum])
-            recv[trajNum, :, :] = kinematics.simulate(ys[trajNum, :, :])
+            recv_xs = kinematics.simulate(ys[trajNum, :, :].T)
+            print("Recv_xs.shape", recv_xs.shape)
+            print("Recv_xs", recv_xs)
+            print('recv.shape', recv.shape)
+            print("self.C", self.C)
+            print("start", recv_xs[:, 0])
+            print("first", self.C @ recv_xs[:, 0])
+            print("second", self.C @ recv_xs[:, 1])
+            
+            print("thingToAssign", np.array([[*(self.C @ recv_xs[:, i])] for i in range(1, traj_len)]))
+            recv[trajNum, :-1, :] = np.array([[*(self.C @ recv_xs[:, i])] for i in range(1, traj_len)])
+            print("penultimate state", kinematics.state)
+            print("penultimate obs", self.C @ kinematics.state)
+            kinematics.predict() # Last step ahead 
+            print("last state", kinematics.state)
+            print("last obs", self.C @ kinematics.state)
+            recv[trajNum, -1, :] = self.C @ kinematics.state
         return recv
 
 class IdKfModel:
@@ -92,7 +106,7 @@ class IdKfModel:
         self.start_states = start_states
 
     def __call__(self,  ys):
-        num_traj, obs_dim, traj_len = ys.shape
+        num_traj, traj_len, obs_dim = ys.shape
         recv = np.zeros_like(ys)
         for traj_num in range(num_traj):
             # No peeking on what is the actual matrix
@@ -102,20 +116,21 @@ class IdKfModel:
             kinematics = KFilter(A_unk, C, self.Q, self.R, state=self.start_states[traj_num])
             for t in range(traj_len):
                 A_found = system_id(ys[traj_num, :, :].T, t, self.start_states[traj_num])
+                import ipdb; ipdb.set_trace()
                 kinematics.A = A_found
                 kinematics.predict()
                 kinematics.update(ys[traj_num, :, t])
-                recv[traj_num, :, t] = kinematics.state
+                recv[traj_num, :, t] = C @ kinematics.state
         return recv
 
-class LerpModel:
+class LerpModel: # Note - requires that C = I
     def __init__(self, state_dim):
         self.name = 'LinearInterpolation'
         self.state_dim = state_dim
 
     def __call__(self, ys):
-        num_traj, obs_dim, traj_len = ys.shape
-        recv = np.zeros(shape=(num_traj, self.state_dim, traj_len)) 
+        num_traj, traj_len, obs_dim = ys.shape
+        recv = np.zeros(shape=(num_traj, traj_len, obs_dim)) 
         recv[:, :, 0] = ys[:, :, 0]
         for t in range(1, traj_len - 1):
             recv[:, :, t] = (ys[:, :, t - 1] + ys[:, :, t + 1]) / 2
@@ -137,9 +152,9 @@ class KfSmoothedModel:
         self.A, self.C, self.Q, self.R, self.start_states, self.end_states = A, C, Q, R, start_states, end_states
 
     def __call__(self, ys):
-        num_traj, obs_dim, traj_len = ys.shape
+        num_traj, traj_len, obs_dim = ys.shape
         state_dim = self.A.shape[0]
-        recv = np.zeros(shape=(num_traj, state_dim, traj_len))
+        recv = np.zeros(shape=(num_traj, traj_len, state_dim))
         for trajNum in range(num_traj):
             forward = KFilter(self.A, self.C, self.Q, self.R, self.start_states[trajNum])
             backward = KFilter(np.linalg.inv(self.A), self.C, self.Q, self.R, self.end_states[trajNum])
@@ -156,11 +171,11 @@ class LSOptModel:
         self.A, self.C, self.Q, self.R = A, C, Q, R
         
     def __call__(self, ys):
-        num_traj, obs_dim, traj_len = ys.shape
+        num_traj, traj_len, obs_dim = ys.shape
         state_dim = self.A.shape[0]
         recv = np.zeros(shape=(num_traj, state_dim, traj_len))
         for traj_num in range(num_traj):
-            recv[traj_num, :, :] = optimal_traj(self.A, self.C, self.Q, self.R, ys[traj_num, :, :].T).T
+            recv[traj_num, :, :] = optimal_traj(self.A, self.C, self.Q, self.R, ys[traj_num, :, :].T)
         return recv
 
 class GPTModel(nn.Module):

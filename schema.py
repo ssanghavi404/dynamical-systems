@@ -40,7 +40,7 @@ wandb_schema = {
     'project': merge(tstring, default('dynamical-systems')),
     'entity': merge(tstring, default('saagar')),
     'notes': merge(tstring, default('')),
-    'log_every_steps': merge(tinteger, default(100)),
+    'log_every_steps': merge(tinteger, default(10)),
 }
 
 schema = {
