@@ -80,21 +80,21 @@ class KfModel:
         for trajNum in range(num_traj):
             kinematics = KFilter(self.A, self.C, self.Q, self.R, state=self.start_states[trajNum])
             recv_xs = kinematics.simulate(ys[trajNum, :, :].T)
-            print("Recv_xs.shape", recv_xs.shape)
-            print("Recv_xs", recv_xs)
-            print('recv.shape', recv.shape)
-            print("self.C", self.C)
-            print("start", recv_xs[:, 0])
-            print("first", self.C @ recv_xs[:, 0])
-            print("second", self.C @ recv_xs[:, 1])
+            # print("Recv_xs.shape", recv_xs.shape)
+            # print("Recv_xs", recv_xs)
+            # print('recv.shape', recv.shape)
+            # print("self.C", self.C)
+            # print("start", recv_xs[:, 0])
+            # print("first", self.C @ recv_xs[:, 0])
+            # print("second", self.C @ recv_xs[:, 1])
             
-            print("thingToAssign", np.array([[*(self.C @ recv_xs[:, i])] for i in range(1, traj_len)]))
+            # print("thingToAssign", np.array([[*(self.C @ recv_xs[:, i])] for i in range(1, traj_len)]))
             recv[trajNum, :-1, :] = np.array([[*(self.C @ recv_xs[:, i])] for i in range(1, traj_len)])
-            print("penultimate state", kinematics.state)
-            print("penultimate obs", self.C @ kinematics.state)
+            # print("penultimate state", kinematics.state)
+            # print("penultimate obs", self.C @ kinematics.state)
             kinematics.predict() # Last step ahead 
-            print("last state", kinematics.state)
-            print("last obs", self.C @ kinematics.state)
+            # print("last state", kinematics.state)
+            # print("last obs", self.C @ kinematics.state)
             recv[trajNum, -1, :] = self.C @ kinematics.state
         return recv
 

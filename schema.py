@@ -19,7 +19,7 @@ task_schema = {
     'matrix_dim': merge(tinteger, nullable, allowed([None, 2, 3, 4, 5, 6]), default(None)),
     'matrix_type': merge(tstring, nullable, allowed([None, 'diag', 'ident']), default(None)),
 
-    # Trajectory Length
+    # Trajectory Length. This should always be specified
     'traj_len': merge(tinteger, default(200)),
 }
 
@@ -48,5 +48,5 @@ schema = {
     'task': stdict(task_schema),
     'training': stdict(training_schema),
     'wandb': stdict(wandb_schema),
-    'num_tests': merge(tinteger, nullable, default(None)) # Number of tests to run in evaluation
+    'num_tests': merge(tinteger, default(200)), # Number of tests to run in evaluation
 }
