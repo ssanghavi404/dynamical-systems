@@ -7,26 +7,25 @@ from plotting import *
 
 # Given the system parameters and timelength, generate num_traj
 # The states will be of size 
-# x.shape = (num_traj, state_dim, T+1)
-# y.shape = (num_traj, obs_dim, T+1)
+# x.shape = (num_traj, T+1, state_dim)
+# y.shape = (num_traj, T+1, obs_dim)
 def generate_traj(num_traj, T, A, C, Q, R, x0, rng, state_dim=None, obs_dim=None):
     if state_dim is None: state_dim = A.shape[0]
     if obs_dim is None: obs_dim = C.shape[0]
 
-    x = np.zeros(shape=(num_traj, state_dim, T+1))
-    for i in range(num_traj): x[i, :, 0] = x0
+    x = np.zeros(shape=(num_traj, T+1, state_dim))
+    for i in range(num_traj): x[i, 0, :] = x0
 
-    y = np.zeros(shape=(num_traj, obs_dim, T+1))
+    y = np.zeros(shape=(num_traj, T+1, obs_dim))
 
     for i in range(num_traj):
         for t in range(T):
             w = rng.multivariate_normal(mean=np.zeros(state_dim), cov=Q)
             v = rng.multivariate_normal(mean=np.zeros(obs_dim), cov=R)
-            x[i, :, t+1] = A @ x[i, :, t] + w
-            y[i, :, t] = C @ x[i, :, t] + v
+            x[i, t+1, :] = A @ x[i, t, :] + w
+            y[i, t, :] = C @ x[i, t, :] + v
         v = rng.multivariate_normal(mean=np.zeros(obs_dim), cov=R)
-        y[i, :, T] = C @ x[i, :, T] + v
-
+        y[i, T, :] = C @ x[i, T, :] + v
     return x, y
 
 # 2d rotation around a circle, rotate "angle" degrees in each timestep

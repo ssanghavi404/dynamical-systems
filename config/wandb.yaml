@@ -2,4 +2,4 @@ wandb:
   project: dynamical-systems
   entity: saagar
   notes:
-  log_every_steps: 10
+  log_every_steps: 1

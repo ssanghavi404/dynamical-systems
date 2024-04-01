@@ -1,4 +1,4 @@
-# Adapted from UC Berkeley EE 126 - Credit: Kannan Ramachandran
+# Adapted from UC Berkeley EE 126
 import copy
 import numpy as np
 import torch
@@ -45,8 +45,8 @@ class KFilter:
         states = np.zeros(shape=(self.state_size, T))
         for t in range(T):
             self.predict()
-            self.update(measurements[:, t], t)
             states[:, t] = self.state
+            self.update(measurements[:, t], t)
         return states
     
     def run_till_ss(self):

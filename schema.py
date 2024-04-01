@@ -3,9 +3,11 @@ from funcy import merge
 
 model_schema = {
     'family': merge(tstring, allowed(['gpt', 'bert'])),
+    'name': merge(tstring, default("model")),
     'n_embd': merge(tinteger, required),
     'n_layer': merge(tinteger, required),
     'n_head': merge(tinteger, required),
+    'n_positions': merge(tinteger, default(1024))
 }
 
 task_schema = {
@@ -18,20 +20,18 @@ task_schema = {
     'order_n': merge(tinteger, nullable, default(3)),
     'matrix_dim': merge(tinteger, nullable, allowed([None, 2, 3, 4, 5, 6]), default(None)),
     'matrix_type': merge(tstring, nullable, allowed([None, 'diag', 'ident']), default(None)),
-
-    # Trajectory Length. This should always be specified
-    'traj_len': merge(tinteger, default(200)),
 }
 
 training_schema = {
     # Training Hyperparameters
     'batch_size': merge(tinteger, default(64)),
-    'lr': merge(tfloat, default(1e-3)),
     'optim': merge(tstring, allowed(['adam', 'adamw', 'sgd']), default('adamw')),
     'num_iterations': merge(tinteger, default(1000)),
+    'traj_len': merge(tinteger, default(256)),
+    'lr': merge(tfloat, default(1e-3)),
 
     # Information about saving the models
-    'save_every_steps': merge(tinteger, default(300)),  # how often to checkpoint
+    'save_every_steps': merge(tinteger, default(300)), # how often to checkpoint
     'save_path': merge(tstring, default('./results/')), # where to save the results
     'graph_path': merge(tstring, default('./plots/')), # where to save plot figures. 
 }
@@ -43,10 +43,15 @@ wandb_schema = {
     'log_every_steps': merge(tinteger, default(10)),
 }
 
+testing_schema = {
+    'num_tests': merge(tinteger, default(1000)),
+    'traj_len': merge(tinteger, default(256))
+}
+
 schema = {
     'model': stdict(model_schema),
     'task': stdict(task_schema),
     'training': stdict(training_schema),
     'wandb': stdict(wandb_schema),
-    'num_tests': merge(tinteger, default(200)), # Number of tests to run in evaluation
+    'testing': stdict(testing_schema)
 }
